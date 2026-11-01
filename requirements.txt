@@ -1,0 +1,4 @@
+fastmcp
+openai-agents
+pytest
+pytest-asyncio
