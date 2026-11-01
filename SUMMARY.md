@@ -1,0 +1,24 @@
+# C5 – Agent Tools: Written Summary and Reflection
+
+## Part 1: Understanding MCP and Evaluating the Fetch MCP Server
+
+The Model Context Protocol (MCP), introduced by Anthropic in November 2024, is an open standard that lets AI agents connect to external tools, data sources, and applications. As the Hugging Face article explains, MCP replaces the custom integration code developers once wrote for every API or service with one standardized interface, making agent systems more flexible, reusable, and easier to extend. It also supports tool discovery, so agents can learn what capabilities are available at runtime.
+
+MCP follows a Host–Client–Server architecture. The Host is the application where the agent runs; it manages the agent's reasoning and decisions. Inside the host, each MCP Client maintains a dedicated 1:1 connection to a single server, so a host using several servers runs several clients. The Server exposes capabilities (tools, resources, and prompts) and performs the actual work, such as calling an API or querying a database. The article describes this as reducing integration from an "N×M" to an "N+M" problem: any client can use any server. It also stresses that MCP is an integration layer for the agent's Action step, not an orchestration engine.
+
+I explored the Fetch MCP Server from the official MCP GitHub repository. Its single `fetch` tool retrieves a URL and converts the HTML to Markdown for easier LLM consumption. Arguments are `url` (required), `max_length` (default 5000), `start_index`, and `raw`.
+
+Judged against the class principles, Fetch is mostly strong. Its interface is well defined: typed, documented arguments with defaults. It is largely single-purpose, since it only retrieves content and never mixes in unrelated tasks. Its behavior is predictable: it is annotated `readOnlyHint` and `idempotentHint`, so the model knows it is safe to call repeatedly, and failures such as robots.txt refusals or HTTP errors return `isError: true` with readable text the agent can act on.
+
+It is not perfect, though. The `raw` flag makes one tool behave two ways (Markdown conversion or raw content), which slightly bundles responsibilities; separate tools would be cleaner. Responses also truncate at 5000 characters by default, so the agent must page with `start_index`, which makes behavior less obvious than a single complete response. Overall, Fetch shows why focused, well-documented tools are easier for agents to select, test, and maintain than large multi-purpose ones.
+
+### References
+- Ksenia Se, *What Is MCP? Model Context Protocol in Agentic AI, Explained*. [Hugging Face](https://huggingface.co/blog/Kseniase/mcp)
+- Model Context Protocol, *Fetch MCP Server*. [GitHub](https://github.com/modelcontextprotocol/servers/blob/main/src/fetch/README.md)
+- EECE 503P/798S, *C5 – Agent Tools*, American University of Beirut, lecture slides.
+
+## Reflection
+
+I drew the line between my three tools by asking one question: does this tool change anything? `get_deadlines` only reads, so the agent can call it as often as it likes without consequences. `create_reminder` is the only tool that writes to disk, and I deliberately kept it free of any lookup logic, so it simply saves exactly what it is given. `plan_study_session` adds no new capability of its own; it only calls the other two in sequence and combines their results. I also used the "and" test from class. My first idea was a `create_reminder` that also found the relevant deadline, but describing it required the word "and", which showed it was really two jobs. I moved the lookup into the Data tool and the sequencing into the Orchestration tool, which made each tool easier to describe, test, and for the agent to choose correctly. I felt that three tools were the right number for this use case: fewer would have forced a multi-purpose tool, and more (such as listing or deleting reminders) would add convenience without demonstrating anything new about the Data, Action, and Orchestration split. The hardest part was predictable failures. The Orchestration tool had to handle cases like a repeated run, so it reports duplicates as "skipped" instead of crashing, and every tool raises a clear error the agent can explain to the user, as the MATH 999 example shows.
+
+For next steps, I would add `list_reminders` and `delete_reminder` so users can manage what they have saved, and replace the JSON files with a real calendar or university LMS integration so deadlines are not hand-entered. I would also let the user choose how many days before a deadline to be reminded, instead of always one day. Finally, because the Orchestration tool can write many reminders at once, I would have the agent ask for confirmation before saving them, which would make its behavior more predictable and keep the user in control.
